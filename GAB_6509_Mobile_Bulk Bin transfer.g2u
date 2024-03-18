@@ -1,0 +1,231 @@
+﻿Program.Sub.ScreenSU.Start
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+'Programmed for GS Mobile
+'by Brady Stevens
+'10/13/2021
+'programmed for M-Industries
+'purpose is to move in bulk all item master records for part where heat matches with quantity and not allocated, from bin to bin new.  Heat is used as a pallet id
+'and everything that matches part and heat will be transferred to To Bin scanned
+
+Function.ODBC.Connection!Conx.Opencompanyconnection
+Function.ODBC.Connection!Cony.Opencommonconnection
+
+V.Local.sQuery.Declare(String)
+V.Local.sQuery1.declare(String)
+V.Local.sJob.Declare(String)
+V.Local.sSuffix.Declare(String)
+V.Local.sSeq.Declare(String)
+V.Local.sJobSuffixSeq.Declare(String)
+V.Local.sJobSuffixSeq_noprefix.Declare(String)
+V.Local.sEmployee.Declare(String)
+V.Local.sWC.Declare(String)
+V.Local.sName.Declare(String)
+V.Local.sValue.Declare(String)
+V.Local.sUID.Declare(String)
+V.Local.sUserid.Declare(String)
+V.Local.sPrinter.Declare(String)
+V.Local.sReportName.Declare(String)
+V.Local.sTransID.Declare(String)
+V.Local.sTransSfx.Declare(String)
+V.Local.sPrefix.Declare(String)
+V.Local.sTransType.Declare(String)
+V.Local.dateyyyymmdd.Declare(String)
+V.Local.year.Declare(String)
+V.Local.month.Declare(String)
+V.Local.day.Declare(String)
+V.Local.hour.Declare(String)
+V.Local.minute.Declare(String)
+V.Local.timemmnnss.Declare(String)
+V.Local.timehhnnss.Declare(String)
+V.Local.seqkey.Declare(String)
+V.Local.sResults.Declare(String)
+V.Local.scounter.Declare(Long)
+V.Local.stransIDnew.Declare(String)
+F.Intrinsic.Date.Year(V.Ambient.Date,V.Local.year)
+F.Intrinsic.Date.Month(V.Ambient.Date,V.Local.month)
+F.Intrinsic.String.LPad(V.Local.month,0,2,V.Local.MONTH)
+F.Intrinsic.Date.Day(V.Ambient.Date,V.Local.day)
+F.Intrinsic.String.LPad(V.Local.day,0,2,V.Local.day)
+F.Intrinsic.DATE.Hour(V.Ambient.Time,V.LOCAL.HOUR)
+F.Intrinsic.String.LPad(V.Local.hour,0,2,V.Local.hour)
+F.Intrinsic.DATE.MINUTE(V.Ambient.Time,V.LOCAL.MINUTE)
+F.Intrinsic.String.LPad(V.Local.minute,0,2,V.Local.minute)
+F.Intrinsic.String.Concat(V.Local.year,V.Local.month,V.Local.day,V.Local.dateyyyymmdd)
+F.Intrinsic.String.Concat(V.Local.hour,V.Local.minute,"0000",V.Local.timehhnnss)
+V.Local.sFromBin.Declare(String)
+V.Local.sToBin.Declare(String)
+V.Local.sPart.Declare(String)
+V.Local.sLoc.Declare(String)
+V.Local.sLot.Declare(String)
+V.Local.sHeat.Declare(String)
+V.Local.sSerial.Declare(String)
+V.Local.sQuantity.Declare(String)
+
+V.Local.sTransID.Set(V.Passed.DATA-TRANSID)
+V.Local.sTransSfx.Set("0000")
+
+	F.Intrinsic.String.Concat("Select * from WIRELESS_LINE where TRANS_ID = '",V.Local.sTransID,"'",V.Local.sQuery)
+	Function.ODBC.Connection!Conx.OpenRecordsetRO("rstWIR",V.Local.squery)
+
+	V.Local.sTransType.Set(V.ODBC.Conx!rstWIR.FieldValTrim!Trans_Type)
+	V.Local.sPart.Set(V.ODBC.Conx!rstWIR.FieldValtrim!Field_1)
+	V.Local.sHeat.Set(V.ODBC.Conx!rstWIR.FieldValtrim!Field_2)
+	V.Local.sToBin.Set(V.ODBC.Conx!rstWIR.FieldValtrim!Field_3)
+	F.Intrinsic.String.UCase(V.Local.sToBin,V.Local.sToBin)	
+
+
+'get label printer
+F.Intrinsic.String.Concat("Select DEFAULT_PRINTER,LABEL_PRINTER,USER_ID  from WIRELESS_HDR where TRANS_ID = '",V.Local.sTransID,"'",V.Local.sQuery)
+	Function.ODBC.Connection!Conx.OpenRecordsetRO("rstWIR1",V.Local.squery)
+	V.Local.sPrinter.Set(V.ODBC.Conx!rstWIR1.FieldVal!LABEL_PRINTER)
+	V.Local.sUID.Set(V.ODBC.Conx!rstWIR1.FieldVal!USER_ID)
+	F.odbc.Conx!rstWIR1.Close
+
+'validate Part
+	F.Intrinsic.String.Build("Select part from V_inventory_mstr where part = '{0}'",v.Local.sPart,V.Local.sQuery)
+	Function.ODBC.Connection!Conx.OpenRecordsetRO("rstpart",V.Local.squery)
+	F.Intrinsic.Control.If(V.ODBC.Conx!rstpart.EOF,=,True)
+		'fail status
+		f.Intrinsic.String.Build("<tr><td style=color:Red;font-weight:bold;><center>TRY AGAIN Invalid Part scanned: {0}</tr></center></td>",v.Local.sPart,v.Local.sResults)
+		F.Global.Mobile.setcustomresult(v.Caller.CompanyCode,v.local.sTransID,v.Local.sResults)
+	F.ODBC.Conx!rstpart.Close
+		F.Intrinsic.Control.End
+	F.Intrinsic.Control.Endif
+
+'validate To Bin
+	F.Intrinsic.String.Concat("Select BIN from V_BIN_MASTER where BIN = '",V.Local.sTOBIN,"'",V.Local.sQuery)
+	Function.ODBC.Connection!Conx.OpenRecordsetRO("rstTBIN",V.Local.squery)
+	F.Intrinsic.Control.If(V.ODBC.Conx!rstTBIN.EOF,=,True)
+		'fail status
+		f.Intrinsic.String.Build("<tr><td style=color:Red;font-weight:bold;><center>TRY AGAIN Invalid To Bin scanned: {0}</tr></center></td>",v.Local.sToBin,v.Local.sResults)
+		F.Global.Mobile.setcustomresult(v.Caller.CompanyCode,v.local.sTransID,v.Local.sResults)
+	F.ODBC.Conx!rstTBIN.Close
+		F.Intrinsic.Control.End
+	F.Intrinsic.Control.Endif
+	
+'Validate and lookup records in V_ITEM_MASTER table for part and heat passed in mobile form
+F.Intrinsic.String.build("Select * from V_ITEM_MASTER where heat  = '{0}' and part = '{1}' AND QUANTITY > 0 AND ALLOCATED <> 'Y'",v.Local.sHeat,v.Local.sPart,V.Local.sQuery)
+Function.ODBC.Connection!Conx.OpenRecordsetRO("rstITEM",V.Local.squery)
+F.Intrinsic.Control.If(V.ODBC.Conx!rstITEM.EOF,=,False)
+
+V.Local.scounter.Set(0)
+
+'loop through records returned
+F.Intrinsic.Control.DoUntil(V.ODBC.Conx!rstITEM.EOF,=,True)
+
+'Set variables for inventory items
+V.Local.spart.Set(V.ODBC.Conx!rstITEM.FieldValTrim!PART)
+V.Local.sloc.Set(V.ODBC.Conx!rstITEM.FieldValTrim!LOCATION)
+V.Local.slot.Set(V.ODBC.Conx!rstITEM.FieldValTrim!LOT)
+V.Local.sheat.Set(V.ODBC.Conx!rstITEM.FieldValTrim!HEAT)
+V.Local.sserial.Set(V.ODBC.Conx!rstITEM.FieldValTrim!SERIAL_NUMBER)
+V.Local.sQuantity.Set(V.ODBC.Conx!rstITEM.FieldVal!QUANTITY)
+V.Local.sFromBin.Set(V.ODBC.Conx!rstITEM.FieldVal!bin)
+F.Intrinsic.String.Format(V.Local.sQuantity,"####.000000",V.Local.sQuantity)
+
+'Write to wireless tables
+
+	V.Local.squery.Set("Select TOP 1 TRANS_ID from WIRELESS_HDR ORDER BY TRANS_ID DESC")
+	Function.ODBC.Connection!Conx.OpenRecordsetRO("WIR8",V.Local.squery)
+	F.Intrinsic.Control.If(V.ODBC.Conx!WIR8.EOF,=,False)
+	V.Local.stransidnew.Set(V.ODBC.Conx!WIR8.FieldVALTRIM!TRANS_ID)
+	F.Intrinsic.Math.Add(V.Local.stransidnew,1,V.Local.stransIDnew)
+	F.Intrinsic.String.LPad(V.Local.stransIDnew,"0",9,V.Local.stransIDnew)
+	F.ODBC.Conx!WIR8.Close
+	F.Intrinsic.Control.EndIf
+
+
+'WRITE TO WIRELESS_HDR
+V.Local.sQuery.Set("SELECT * from WIRELESS_HDR")
+Function.ODBC.Connection!Conx.OpenRecordsetRW("rstNew",V.Local.sQuery)
+
+		Function.ODBC.Conx!rstNew.AddNew
+		Function.ODBC.Conx!rstNew.Set!TRANS_ID(V.Local.stransIDnew)
+		Function.ODBC.Conx!rstNew.Set!TRANS_TYPE("O90")
+		Function.ODBC.Conx!rstNew.Set!ATTEMPTED_DATE("00000000")
+		Function.ODBC.Conx!rstNew.Set!ATTEMPTED_TIME("00000000")
+		Function.ODBC.Conx!rstNew.Set!LABEL_PRINTER(V.Local.sPrinter)
+		Function.ODBC.Conx!rstNew.Set!USER_ID(V.Local.sUID)
+		Function.ODBC.Conx!rstNew.Set!BATCH(0)
+		Function.ODBC.Conx!rstNew.Set!Attempted_Flag("Y")
+		F.ODBC.Conx!rstNew.Update
+		F.ODBC.Conx!rstNew.Close
+
+'WRITE TO WIRELESS_LINE
+V.Local.sQuery.Set("SELECT * from WIRELESS_LINE")
+Function.ODBC.Connection!Conx.OpenRecordsetRW("rstNew1",V.Local.sQuery)
+
+		Function.ODBC.Conx!rstNew1.AddNew
+		Function.ODBC.Conx!rstNew1.Set!TRANS_ID(V.Local.stransIDnew)
+		Function.ODBC.Conx!rstNew1.Set!SEQ("0000")
+		Function.ODBC.Conx!rstNew1.Set!TRANS_TYPE("O90")
+'PART
+		Function.ODBC.Conx!rstNew1.Set!FIELD_1(V.Local.sPart)
+'LOCATION
+		Function.ODBC.Conx!rstNew1.Set!FIELD_2(V.Local.sLOC)
+'TO LOCATION
+		Function.ODBC.Conx!rstNew1.Set!FIELD_13(V.Local.sLOC)		
+		
+'QUANTITY
+	Function.ODBC.Conx!rstNew1.Set!FIELD_3(V.Local.sQUANTITY)
+
+'FROM BIN
+		Function.ODBC.Conx!rstNew1.Set!FIELD_4(V.Local.sFROMBIN)
+'TO BIN
+		Function.ODBC.Conx!rstNew1.Set!FIELD_5(V.Local.sTOBIN)
+'LOT
+		Function.ODBC.Conx!rstNew1.Set!FIELD_6(V.Local.sLOT)
+		Function.ODBC.Conx!rstNew1.Set!FIELD_14(V.Local.sLOT)
+'HEAT
+		Function.ODBC.Conx!rstNew1.Set!FIELD_7(V.Local.sHEAT)
+		Function.ODBC.Conx!rstNew1.Set!FIELD_15(V.Local.sHEAT)
+'SERIAL
+		Function.ODBC.Conx!rstNew1.Set!FIELD_8(V.Local.sSERIAL)
+		Function.ODBC.Conx!rstNew1.Set!FIELD_16(V.Local.sSERIAL)
+
+'OTHER
+		Function.ODBC.Conx!rstNew1.Set!FIELD_9("0000")
+		Function.ODBC.Conx!rstNew1.Set!FIELD_10("0000")
+		Function.ODBC.Conx!rstNew1.Set!FIELD_12("1")
+		Function.ODBC.Conx!rstNew1.Set!ERROR_ID(0)
+		F.ODBC.Conx!rstNew1.Update
+		F.ODBC.Conx!rstNew1.Close
+
+'REMOVE ATTEMPTED_FLAG FOR WIREPOLL TO PROCESS
+F.Intrinsic.String.Build("UPDATE WIRELESS_HDR SET ATTEMPTED_FLAG= '' WHERE TRANS_ID = '{0}'",V.Local.stransIDnew,V.Local.sQuery)
+F.ODBC.Connection!Conx.Execute(V.Local.sQuery)
+
+F.Intrinsic.Math.Add(V.Local.scounter,1,V.Local.scounter)
+F.ODBC.Conx!rstITEM.MoveNext
+F.Intrinsic.Control.Loop
+F.ODBC.Conx!rstITEM.Close
+
+'success status
+	f.Intrinsic.String.Build("<tr><td style=color:Green;font-weight:bold;><center><====Successful====> moved: {0} Lot/Bin items for Part: {2} and Heat: {3} to Bin: {1}</tr></center></td>",v.Local.scounter,v.Local.sToBin,v.Local.sPart,v.Local.sHeat,v.Local.sResults)
+	F.Global.Mobile.setcustomresult(v.Caller.CompanyCode,v.local.sTransID,v.Local.sResults)		
+
+F.Intrinsic.Control.Else
+		'fail status
+			f.Intrinsic.String.Build("<tr><td style=color:Red;font-weight:bold;><center>FAILED - No inventory found in Heat: {2} for To Bin: {0} and Part: {1}</tr></center></td>",v.Local.sToBin,v.Local.sPart,v.Local.sHeat,v.Local.sResults)
+			F.Global.Mobile.setcustomresult(v.Caller.CompanyCode,v.local.sTransID,v.Local.sResults)
+		F.Intrinsic.Control.End
+F.Intrinsic.Control.EndIf
+
+F.ODBC.Connection!Conx.Close
+F.ODBC.Connection!Cony.Close
+
+
+
+Program.Sub.Main.End
+
+Program.Sub.Comments.Start
+${$0$}$$}$$}$12:00:00 AM
+${$5$}$2.0.0.0$}$2
+${$6$}$bstevens$}$20211013163307243$}$3Pg7+K2MGztoXyjxMVZqWaM5g3GOUsSN8rGTkvL6bqkdpjVqxC+CEEvl9oUluq43lE0GcUJ0XvxT544fAIgi2w==
+Program.Sub.Comments.End
